@@ -328,6 +328,7 @@ class GradientTrajectoryMapper:
         Y: Union[np.ndarray, pd.Series],
         df_coord: pd.DataFrame,
         coord_start: Union[np.ndarray, Literal['random', 'highest', 'lowest']] = 'random',
+        strict_avoid_uTurn: bool = True,
     ) -> TrajectoryType:
         """
         Infers an optimal gradient trajectory from a starting coordinate.
@@ -380,7 +381,6 @@ class GradientTrajectoryMapper:
         
         # Gradient trajectory logic
         trajectory: List[GradientType]= [] # Trajectory
-        current_point = coord_start
         
         # Find the starting gradient
         gradient_start = self._find_starting_gradient(
@@ -400,7 +400,7 @@ class GradientTrajectoryMapper:
         trajectory.append(gradient_start)
         # Find consecutive gradients to make a trajectory
         for _ in range(self.max_iter):
-            gradient_next = self._compute_next_gradient(trajectory[-1], df_coord, Y)
+            gradient_next = self._compute_next_gradient(trajectory[-1], df_coord, Y, strict_avoid_uTurn=strict_avoid_uTurn)
             if gradient_next is None:
                 break
             trajectory.append(gradient_next)
@@ -425,6 +425,7 @@ class GradientTrajectoryMapper:
             last_gradient: GradientType,
             df_coord: pd.DataFrame,
             Y: pd.Series | np.ndarray,
+            strict_avoid_uTurn: bool = True,
     ):
         """
         Computes the next gradient given last gradient.
@@ -437,14 +438,35 @@ class GradientTrajectoryMapper:
             (-1, 0), (1, 0), # mid-left, mid-right
             (-1, 1), (0, 1), (1, 1), # bot-left, bot-center, bot-right
         ]
+        # Define adjacency of offsets
+        adjacency_map = {
+            (-1, -1): [(0, -1), (-1, 0)],
+            (0, -1): [(-1, -1), (1, -1)],
+            (1, -1): [(0, -1), (1, 0)],
+            (-1, 0): [(-1, -1), (-1, 1)],
+            (1, 0): [(1, -1), (1, 1)],
+            (-1, 1): [(-1, 0), (0, 1)],
+            (0, 1): [(-1, 1), (1, 1)],
+            (1, 1): [(0, 1), (1, 0)],
+        }
+
+        def _get_adjacent_offsets(offset):
+            return adjacency_map.get(offset, [])
+        
+        offset_uTurn_direct = (-last_gradient.offset[0], -last_gradient.offset[1])
+        offsets_uTurn_indirect = _get_adjacent_offsets(offset_uTurn_direct)
+
         coord_start = last_gradient.coord_end
         for size in self.sizes_windows:
             for offset in offsets:
                 # Avoid U-turn
-                offset_uTurn_direct = (-last_gradient.offset[0], -last_gradient.offset[1])
                 if offset == offset_uTurn_direct:
                     continue
-            
+                # Avoid U-turn (strict)
+                if strict_avoid_uTurn:
+                    if offset in offsets_uTurn_indirect:
+                        continue
+                
                 # Determine window bounds (all inclusive)
                 halfsize = size // 2
                 xmin_window = coord_start[0] + (offset[0] - 1) * halfsize
@@ -500,7 +522,10 @@ class GradientTrajectoryMapper:
         return gradient_optimal
 
     def plot(self,
-             index: int = -1):
+             index: int = -1,
+             cmap: str = 'Reds',
+             threshold_n_gradients: int = 0,
+            ):
         """
         Plots the inferred trajectories over the `index`-th data's spatial coordinates (see
          `.dataset_used['order_fit']` for the index of the dataset used in the certain fit).
@@ -515,18 +540,20 @@ class GradientTrajectoryMapper:
         ix_fits_usedSameData = (np.array(self.dataset_used['order_fit'])==index)
         ix_fits_usedSameData = np.where(ix_fits_usedSameData)[0]
         Y, df_coord = self.dataset_used['YAndCoords'][index]
-        plt.scatter(df_coord['x'], df_coord['y'], c=Y, s=5, alpha=0.7, cmap='jet', label='Spots')
+        plt.scatter(df_coord['x'], df_coord['y'], c=Y, s=5, alpha=0.7, cmap=cmap, label='Spots')
         for i in ix_fits_usedSameData:
             traj: TrajectoryType = self.trajectories[i]
+            if traj.n_gradients < threshold_n_gradients:
+                continue
             coords = []
             for grad in traj.list_gradient:
                 coords.append(grad.coord_start)
             coords.append(traj.coord_end)
             coords = np.array(coords)
-            ax = plt.plot(coords[:,0], coords[:,1], label=f'Traj {i}: ave_$R^2$={traj.RSquared_average:.4f}')
+            plt.plot(coords[:,0], coords[:,1], label=f'Traj {i}: ave_$R^2$={traj.RSquared_average:.4f}')
         plt.legend(loc='upper left', bbox_to_anchor=(1.3, 1), borderaxespad=0.)
         plt.colorbar(label='Feature Intensity')
-        return ax
+        return plt.gca()
 
 
 # In[21]:

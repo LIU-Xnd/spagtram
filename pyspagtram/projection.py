@@ -181,16 +181,16 @@ class TrajectoryProjector:
         else:
             assert type(index) is int
             if scaling_positions:
-                xs = np.linspace(0,1,num=len(proj.y_proj))
+                xs = np.linspace(0,1,num=len(self.projections[index].y_proj))
             else:
                 xs = self.projections[index].x_proj
             if plot_loess == 'raw-only':
                 lt.plot(xs, self.projections[index].y_proj, label=f"Proj {index}")
             else:
                 smoothed = lowess(self.projections[index].y_proj, xs, frac=frac_loess)
-                plt.plot(smoothed[:,0], smoothed[:,1], '--', label=f"Proj {i_proj} loess")
+                plt.plot(smoothed[:,0], smoothed[:,1], '--', label=f"Proj {index} loess")
                 if plot_loess == 'both':
-                    plt.plot(xs, self.projections[index].y_proj, label=f"Proj {i_proj} raw")
+                    plt.plot(xs, self.projections[index].y_proj, label=f"Proj {index} raw")
         plt.legend(loc='upper left', bbox_to_anchor=(1.05, 1), borderaxespad=0.)
         return plt.gca()
         
