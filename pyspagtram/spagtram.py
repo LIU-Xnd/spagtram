@@ -199,6 +199,8 @@ def _tupleOfTwoArrays_in(toa: Tuple[np.ndarray], list_of_toas: List[Tuple[np.nda
 class GradientTrajectoryMapper:
     """Note: `size_window` will be set to a fixed value once a fit_transform is run.
      It can be modified by explicitly reclaiming it either to another value or 'infer'.
+    
+    The df_coord is dataframe with cols ['x','y'] which are expected to be integers.
      """
     def __init__(
         self,
@@ -207,7 +209,8 @@ class GradientTrajectoryMapper:
         size_window: Union[float, Literal['infer']] = 'infer',
         sizeRatio_windowSmaller: float = 0.75,
         sizeRatio_windowLarger: float = 1.25, # larger first
-        n_extraWindows: int = 2,
+        n_extraWindows_larger: int = 3,
+        n_extraWindows_smaller: int = 3,
         max_iter: int = 30,
         n_points_enough_for_regression: int = 8,
     ):
@@ -216,7 +219,8 @@ class GradientTrajectoryMapper:
         self.size_window = size_window
         self.sizeRatio_windowSmaller = sizeRatio_windowSmaller
         self.sizeRatio_windowLarger = sizeRatio_windowLarger
-        self.n_extraWindows = n_extraWindows
+        self.n_extraWindows_larger = n_extraWindows_larger
+        self.n_extraWindows_smaller = n_extraWindows_smaller
         # Sizes of windows in a list (needs initializing)
         self.sizes_windows = None
         self.max_iter = max_iter
@@ -239,7 +243,7 @@ class GradientTrajectoryMapper:
 - size_window: {self.size_window}
     + larger: x{self.sizeRatio_windowLarger}
     + smaller: x{self.sizeRatio_windowSmaller}
-    + n_extraWindows: {self.n_extraWindows} (for each of larger and smaller ones, respectively)
+    + n_extraWindows: {self.n_extraWindows_larger} larger, {self.n_extraWindows_smaller} smaller
 - max_iter: {self.max_iter}
 - n_points_enough_for_regression: {self.n_points_enough_for_regression}
 - trajectories: {len(self.trajectories)} trajectories saved in total
@@ -360,8 +364,9 @@ class GradientTrajectoryMapper:
 
         # Sizes of windows in a list
         sizes_windows: list = [self.size_window]
-        for i_extra in range(1, self.n_extraWindows+1):
+        for i_extra in range(1, self.n_extraWindows_larger+1):
             sizes_windows.append(_make_odd(int(self.size_window * self.sizeRatio_windowLarger ** i_extra)))
+        for i_extra in range(1, self.n_extraWindows_smaller+1):
             sizes_windows.append(_make_odd(int(self.size_window * self.sizeRatio_windowSmaller ** i_extra)))
         self.sizes_windows = sizes_windows
 
@@ -533,7 +538,7 @@ if __name__ == '__main__':
     print(Y.head())
     print(df_coord.head())
     plt.figure(figsize=(10,10))
-    trajmapper = GradientTrajectoryMapper(threshold_RSquared_switchWindowSize=0.6, n_points_enough_for_regression=10, n_extraWindows=5)
+    trajmapper = GradientTrajectoryMapper(threshold_RSquared_switchWindowSize=0.6, n_points_enough_for_regression=10)
     trajmapper.fit_transform(Y=Y, df_coord=df_coord, coord_start='highest')
     trajmapper.fit_transform(Y=Y, df_coord=df_coord, coord_start='lowest')
     for _ in range(3):
